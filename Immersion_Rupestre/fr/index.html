@@ -30,6 +30,7 @@
   body {
     background: var(--bg);
     color: var(--text);
+    overflow-x: hidden;
     font-family: 'Noto Sans SC', sans-serif;
     font-weight: 300;
     font-size: 16px;
@@ -732,6 +733,11 @@
   .studio-brand {
     text-align: center;
     padding: 2rem 0 1rem;
+    /* break out of the 820px .container so the big logo centers on the full page */
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    margin-left: -50vw;
   }
   .studio-name {
     display: inline-block;
