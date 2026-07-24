@@ -161,7 +161,7 @@
       justify-content: center;
       align-items: center;
       transform: translateY(100vh);  /* start off-screen */
-      top: -280px;                   /* extend above viewport to cover kali edge */
+      top: -280px;                   /* 初始值；运行时由 JS 按 0.42*PAGE_H 动态上抬，保证始终盖住 kali 下边缘 */
     }
     #s-intro::after {
       content: '';
@@ -1471,8 +1471,18 @@ function resize() {
   // with PAGE_H, which is what made the hero shader stretch over the white
   // backing on the second pass. Explicit px removes the ambiguity entirely.
   document.querySelectorAll('.section').forEach(s => {
-    s.style.height = (PAGE_H + (s.id === 's-intro' ? 280 : 0)) + 'px'
+    if (s.id !== 's-intro') s.style.height = PAGE_H + 'px'
   })
+  // s-intro doubles as the white underlay behind the kali shader's soft lower
+  // edge during the hero→intro slide. Its upward extension MUST scale with
+  // PAGE_H: the old fixed 280px falls short once the mobile URL bar hides
+  // (taller viewport), opening a band where the helix shows through the
+  // masked shader — the "透底" bug. 0.42*PAGE_H always clears the mask's
+  // transparent line (≈0.626*PAGE_H) with margin, on any screen height.
+  const sIntro   = document.getElementById('s-intro')
+  const introTop = Math.round(PAGE_H * 0.42)
+  sIntro.style.top    = -introTop + 'px'
+  sIntro.style.height = (PAGE_H + introTop) + 'px'
   kaliCanvas.style.width  = Math.round(window.innerWidth * 1.16) + 'px'
   kaliCanvas.style.height = Math.round(PAGE_H * 1.16) + 'px'
   kaliCanvas.style.top    = Math.round(-PAGE_H * 0.14) + 'px'
