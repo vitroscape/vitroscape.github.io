@@ -663,13 +663,13 @@
         margin-bottom: 14px;
       }
       .s1-subtitle { font-size: 10px; letter-spacing: 0.18em; }
-      #s1-body { top: 56%; padding: 0 22px; }
+      #s1-body { top: 48%; padding: 0 22px; }
       /* keep the kali fractal in the upper area so it never covers the tagline */
       #kali-canvas {
         -webkit-mask-image: linear-gradient(to bottom, black 0%, black 42%, transparent 66%);
         mask-image:         linear-gradient(to bottom, black 0%, black 42%, transparent 66%);
       }
-      html[lang="zh"] #s1-body    { top: 62%; }
+      html[lang="zh"] #s1-body    { top: 54%; }
       html[lang="zh"] .s1-tagline { margin-bottom: 26px; }
       #lang-nav { top: 16px; right: 16px; gap: 16px; }
       #lang-nav button { font-size: 11.5px; letter-spacing: 0.16em; }
@@ -1464,6 +1464,20 @@ function resize() {
     PAGE_H = newH
   }
   TOTAL  = (4 + TAIL_FRAC) * PAGE_H
+
+  // Pin every full-screen layer to innerHeight in explicit px. Mobile browsers
+  // disagree on what inset:0 / % / vh resolve against while the URL bar
+  // shows/hides (ICB vs visible viewport) — CSS-sized layers drift out of sync
+  // with PAGE_H, which is what made the hero shader stretch over the white
+  // backing on the second pass. Explicit px removes the ambiguity entirely.
+  document.querySelectorAll('.section').forEach(s => {
+    s.style.height = (PAGE_H + (s.id === 's-intro' ? 280 : 0)) + 'px'
+  })
+  kaliCanvas.style.width  = Math.round(window.innerWidth * 1.16) + 'px'
+  kaliCanvas.style.height = Math.round(PAGE_H * 1.16) + 'px'
+  kaliCanvas.style.top    = Math.round(-PAGE_H * 0.14) + 'px'
+  kaliCanvas.style.left   = Math.round(-window.innerWidth * 0.08) + 'px'
+
   const s1 = document.getElementById('s1')
   logoRenderer.setSize(s1.clientWidth, s1.clientHeight)
   logoCam.aspect = s1.clientWidth / s1.clientHeight
