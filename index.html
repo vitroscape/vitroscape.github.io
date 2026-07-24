@@ -545,7 +545,7 @@
       transition: all 0.3s ease;
       pointer-events: none;
     }
-    .pt-tick.active { background: #002fa7; transform: scale(1.5); }
+    .pt-tick.active { background: #1a1a1a; transform: scale(1.5); }
     #pt-thumb {
       position: absolute;
       left: 50%;
@@ -553,8 +553,8 @@
       width: 9px; height: 9px;
       margin: -4.5px 0 0 -4.5px;
       border-radius: 50%;
-      background: #002fa7;
-      box-shadow: 0 0 0 5px rgba(0,47,167,0.10);
+      background: #1a1a1a;
+      box-shadow: 0 0 0 5px rgba(0,0,0,0.05);
       pointer-events: none;
     }
     @media (max-width: 768px) {
@@ -664,6 +664,11 @@
       }
       .s1-subtitle { font-size: 10px; letter-spacing: 0.18em; }
       #s1-body { top: 56vh; padding: 0 22px; }
+      /* keep the kali fractal in the upper area so it never covers the tagline */
+      #kali-canvas {
+        -webkit-mask-image: linear-gradient(to bottom, black 0%, black 42%, transparent 66%);
+        mask-image:         linear-gradient(to bottom, black 0%, black 42%, transparent 66%);
+      }
       html[lang="zh"] #s1-body    { top: 62vh; }
       html[lang="zh"] .s1-tagline { margin-bottom: 26px; }
       #lang-nav { top: 16px; right: 16px; gap: 16px; }
@@ -1085,15 +1090,24 @@ new SVGLoader().load('assets/svg/VITROSCAPE_vector.svg', data => {
   meshGroup.scale.set(sf, -sf, sf)
   logoGroup.add(meshGroup)
 
-  // Fit camera
-  const fovRad = logoCam.fov * Math.PI / 180
-  const aspect = window.innerWidth / window.innerHeight || 1.78
-  const hFov   = 2 * Math.atan(Math.tan(fovRad / 2) * aspect)
-  logoCam.position.z = (LOGO.width * 0.5) / Math.tan(hFov / 2) * LOGO.camMargin
-  logoCam.updateProjectionMatrix()
+  // Fit camera + place logo (portrait: lift into the upper third, clear of the tagline)
+  fitLogo()
 
   logoLoaded = true
 })
+
+function fitLogo() {
+  const aspect = window.innerWidth / window.innerHeight || 1.78
+  const fovRad = logoCam.fov * Math.PI / 180
+  const hFov   = 2 * Math.atan(Math.tan(fovRad / 2) * aspect)
+  logoCam.position.z = (LOGO.width * 0.5) / Math.tan(hFov / 2) * LOGO.camMargin
+  logoCam.updateProjectionMatrix()
+  // t: 0 on landscape/desktop → 1 on tall portrait phones
+  const t      = Math.min(Math.max((1.05 - aspect) / 0.55, 0), 1)
+  const halfH  = logoCam.position.z * Math.tan(fovRad / 2)
+  const target = 0.42 * halfH   // ≈ 29vh from the top, above the tagline zone
+  logoGroup.position.y = LOGO.posY + (target - LOGO.posY) * t
+}
 
 // ═══════════════════════════════════════════════════
 //  KALI BACKGROUND (fullscreen fractal for S1)
@@ -1437,7 +1451,7 @@ function resize() {
   const s1 = document.getElementById('s1')
   logoRenderer.setSize(s1.clientWidth, s1.clientHeight)
   logoCam.aspect = s1.clientWidth / s1.clientHeight
-  logoCam.updateProjectionMatrix()
+  fitLogo()   // also re-fits camera z + responsive logo height
 
   helixRenderer.setSize(window.innerWidth, window.innerHeight)
   helixCam.aspect = window.innerWidth / window.innerHeight
