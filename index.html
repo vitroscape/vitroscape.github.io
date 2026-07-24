@@ -1446,7 +1446,19 @@ document.querySelectorAll('#lang-nav button').forEach(btn => {
 //  RESIZE
 // ═══════════════════════════════════════════════════
 function resize() {
-  PAGE_H = window.innerHeight
+  // Mobile URL-bar show/hide changes innerHeight mid-session. Rescale the
+  // virtual scroll in page-units so the section geometry stays aligned;
+  // without this the loop mapping breaks and sections overlap.
+  const oldPH = PAGE_H
+  const newH  = window.innerHeight
+  if (oldPH && newH !== oldPH) {
+    const frac = rawScroll / oldPH
+    PAGE_H     = newH
+    rawScroll  = frac * PAGE_H
+    lerpScroll = frac * PAGE_H
+  } else {
+    PAGE_H = newH
+  }
   TOTAL  = (4 + TAIL_FRAC) * PAGE_H
   const s1 = document.getElementById('s1')
   logoRenderer.setSize(s1.clientWidth, s1.clientHeight)
