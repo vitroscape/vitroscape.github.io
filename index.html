@@ -112,7 +112,7 @@
 
     #s1-body {
       position: absolute;
-      top: 52vh;        /* ← 调这个值控制tagline的起始位置 */
+      top: 52%;         /* ← 调这个值控制tagline的起始位置（用 % 而非 vh：移动端 vh 是静态大视口，URL 栏收展时不跟随） */
       left: 50%;
       transform: translateX(-50%);
       z-index: 2;
@@ -151,7 +151,7 @@
     }
 
     /* Chinese version: tagline is single-line, give more breathing room */
-    html[lang="zh"] #s1-body      { top: 55vh; }
+    html[lang="zh"] #s1-body      { top: 55%; }
     html[lang="zh"] .s1-tagline   { margin-bottom: 40px; }
 
     /* ══ S-INTRO: white intro page ══ */
@@ -663,13 +663,13 @@
         margin-bottom: 14px;
       }
       .s1-subtitle { font-size: 10px; letter-spacing: 0.18em; }
-      #s1-body { top: 56vh; padding: 0 22px; }
+      #s1-body { top: 56%; padding: 0 22px; }
       /* keep the kali fractal in the upper area so it never covers the tagline */
       #kali-canvas {
         -webkit-mask-image: linear-gradient(to bottom, black 0%, black 42%, transparent 66%);
         mask-image:         linear-gradient(to bottom, black 0%, black 42%, transparent 66%);
       }
-      html[lang="zh"] #s1-body    { top: 62vh; }
+      html[lang="zh"] #s1-body    { top: 62%; }
       html[lang="zh"] .s1-tagline { margin-bottom: 26px; }
       #lang-nav { top: 16px; right: 16px; gap: 16px; }
       #lang-nav button { font-size: 11.5px; letter-spacing: 0.16em; }
@@ -1105,7 +1105,7 @@ function fitLogo() {
   // t: 0 on landscape/desktop → 1 on tall portrait phones
   const t      = Math.min(Math.max((1.05 - aspect) / 0.55, 0), 1)
   const halfH  = logoCam.position.z * Math.tan(fovRad / 2)
-  const target = 0.42 * halfH   // ≈ 29vh from the top, above the tagline zone
+  const target = 0.30 * halfH   // portrait: lift logo above tagline zone, but keep it visually connected to the text
   logoGroup.position.y = LOGO.posY + (target - LOGO.posY) * t
 }
 
@@ -1325,6 +1325,7 @@ let lbStep = null            // set by lightbox module: prev/next project while 
 let _panelWasVis = false
 
 let PAGE_H = window.innerHeight
+let _lastVW = window.innerWidth   // tracked by resize(); polled every frame in animate()
 const TAIL_FRAC = 1.0   // extra scroll room after the last card so S3 tail works stay fully visible before the loop wraps
 let TOTAL  = (4 + TAIL_FRAC) * PAGE_H   // S1 + S-intro + S2 + S3 + tail
 
@@ -1449,8 +1450,11 @@ function resize() {
   // Mobile URL-bar show/hide changes innerHeight mid-session. Rescale the
   // virtual scroll in page-units so the section geometry stays aligned;
   // without this the loop mapping breaks and sections overlap.
+  // NOTE: iOS Safari does NOT fire window.resize on URL-bar collapse — this
+  // function is therefore also polled every frame from animate().
   const oldPH = PAGE_H
   const newH  = window.innerHeight
+  _lastVW     = window.innerWidth
   if (oldPH && newH !== oldPH) {
     const frac = rawScroll / oldPH
     PAGE_H     = newH
@@ -1491,6 +1495,11 @@ let _kaliLastScroll = -999   // dirty-flag: skip kali render when nothing change
 function animate() {
   requestAnimationFrame(animate)
   frame++
+
+  // iOS Safari hides/shows the URL bar without firing window.resize (and
+  // Android fires it only at gesture end) — poll the viewport every frame
+  // and re-fit scroll geometry + all renderers the moment it changes.
+  if (window.innerHeight !== PAGE_H || window.innerWidth !== _lastVW) resize()
 
   lerpScroll += (rawScroll - lerpScroll) * 0.07
   const dp = ((lerpScroll % TOTAL) + TOTAL) % TOTAL
