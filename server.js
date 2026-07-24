@@ -6,7 +6,22 @@ const http = require('http')
 const fs   = require('fs')
 const path = require('path')
 
-const PORT = 3000
+// Accept --port=7100, --port 7100 and -p 7100 (npm run dev -- … forwards raw args)
+const rawArgs = process.argv.slice(2)
+const argv = {}
+for (let i = 0; i < rawArgs.length; i++) {
+  const a = rawArgs[i]
+  if (a.startsWith('--')) {
+    const eq = a.indexOf('=')
+    if (eq !== -1) argv[a.slice(2, eq)] = a.slice(eq + 1)
+    else if (i + 1 < rawArgs.length && !rawArgs[i + 1].startsWith('-')) argv[a.slice(2)] = rawArgs[++i]
+    else argv[a.slice(2)] = true
+  } else if (a === '-p' && i + 1 < rawArgs.length) {
+    argv.port = rawArgs[++i]
+  }
+}
+const PORT = Number(process.env.PORT || argv.port || 3000)
+const HOST = argv.host || process.env.HOST || '0.0.0.0'
 const ROOT = __dirname
 
 const MIME = {
@@ -20,6 +35,9 @@ const MIME = {
   '.jpeg': 'image/jpeg',
   '.mp4':  'video/mp4',
   '.webm': 'video/webm',
+  '.webp': 'image/webp',
+  '.ico':  'image/x-icon',
+  '.woff2': 'font/woff2',
 }
 
 http.createServer((req, res) => {
@@ -47,13 +65,18 @@ http.createServer((req, res) => {
   // Stay inside ROOT (basic path traversal guard)
   if (!filePath.startsWith(ROOT)) { res.writeHead(403); res.end(); return }
 
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+  // Directory → serve its index.html (GitHub Pages behavior)
+  let finalPath = filePath
+  if (fs.existsSync(finalPath) && fs.statSync(finalPath).isDirectory()) {
+    finalPath = path.join(finalPath, 'index.html')
+  }
+  if (!fs.existsSync(finalPath) || fs.statSync(finalPath).isDirectory()) {
     res.writeHead(404); res.end('Not found'); return
   }
 
-  const ext     = path.extname(filePath).toLowerCase()
+  const ext     = path.extname(finalPath).toLowerCase()
   const mime    = MIME[ext] || 'application/octet-stream'
-  const stat    = fs.statSync(filePath)
+  const stat    = fs.statSync(finalPath)
   const total   = stat.size
 
   // Range support for video
@@ -67,12 +90,12 @@ http.createServer((req, res) => {
       'Content-Length': end - start + 1,
       'Content-Type':   mime,
     })
-    fs.createReadStream(filePath, { start, end }).pipe(res)
+    fs.createReadStream(finalPath, { start, end }).pipe(res)
   } else {
     res.writeHead(200, { 'Content-Type': mime, 'Content-Length': total })
-    fs.createReadStream(filePath).pipe(res)
+    fs.createReadStream(finalPath).pipe(res)
   }
 
-}).listen(PORT, '127.0.0.1', () => {
+}).listen(PORT, HOST, () => {
   console.log(`vitroscape dev server → http://localhost:${PORT}`)
 })

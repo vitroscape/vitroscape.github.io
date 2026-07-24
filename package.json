@@ -1,0 +1,9 @@
+{
+  "name": "vitroscape-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VITROSCAPE — Immersive Hybrid Realities Studio website",
+  "scripts": {
+    "dev": "node server.js"
+  }
+}
