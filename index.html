@@ -1283,27 +1283,66 @@ const pSizeArr = new Float32Array(P_COUNT)
 for (let i = 0; i < P_COUNT; i++) pSizeArr[i] = 0.028 + Math.random() * 0.062
 pGeo.setAttribute('aSize',    new THREE.BufferAttribute(pSizeArr, 1))
 
-// Soft round dust motes: radial falloff + faint luminous core (no more square sprites)
+// Entrance convergence: every particle starts scattered in a wide shell and
+// flies back to its spiral slot (staggered) the first time the works scene
+// becomes visible — Active-Theory-style assemble moment.
+const pStartArr = new Float32Array(P_COUNT * 3)
+for (let i = 0; i < P_COUNT; i++) {
+  const ang = Math.random() * Math.PI * 2
+  const rad = 6.5 + Math.random() * 7.0
+  pStartArr[i * 3]     = Math.cos(ang) * rad
+  pStartArr[i * 3 + 1] = (Math.random() - 0.5) * HSPAN * 1.7
+  pStartArr[i * 3 + 2] = Math.sin(ang) * rad
+}
+const pAlphaArr  = new Float32Array(P_COUNT)   // 0 until entrance begins
+const pAlphaAttr = new THREE.BufferAttribute(pAlphaArr, 1)
+pGeo.setAttribute('aAlpha', pAlphaAttr)
+
+let entranceStarted = false
+let entranceT       = 0   // 0 = fully scattered → 1 = assembled
+let scrollTurb      = 0   // turbulence magnitude 0..1 (derived from scrollVelS)
+let scrollVelS      = 0   // signed, smoothed scroll velocity — continuous through zero
+
+// Soft round dust motes: radial falloff + faint luminous core.
+// Colour: depth two-tone (warm off-white near / gray-blue far) modulated by
+// the per-particle luminance attribute; uTurb adds scroll-energy swell.
 const pMat = new THREE.ShaderMaterial({
   transparent: true,
   depthWrite: false,
   vertexColors: true,
+  uniforms: {
+    uColNear: { value: new THREE.Vector3(0.96, 0.93, 0.86) },   // warm off-white
+    uColFar:  { value: new THREE.Vector3(0.42, 0.50, 0.63) },   // gray blue
+    uTurb:    { value: 0 },
+  },
   vertexShader: `
     attribute float aSize;
-    varying vec3 vColor;
+    attribute float aAlpha;
+    uniform vec3  uColNear;
+    uniform vec3  uColFar;
+    uniform float uTurb;
+    varying vec3  vColor;
+    varying float vAlpha;
     void main() {
-      vColor = color;
-      vec4 mv = modelViewMatrix * vec4(position, 1.0);
-      gl_PointSize = aSize * (420.0 / -mv.z);
+      vec4  mv    = modelViewMatrix * vec4(position, 1.0);
+      float depth = -mv.z;
+      float dm    = smoothstep(4.2, 9.6, depth);
+      vColor = mix(uColNear, uColFar, dm)
+             * (0.45 + color.r * 0.85)          // per-particle luminance variation
+             * (1.0 + uTurb * 0.25);            // energy brighten while scrolling
+      vAlpha = aAlpha;
+      gl_PointSize = aSize * (1.0 + uTurb * 0.45) * (420.0 / depth);
       gl_Position  = projectionMatrix * mv;
     }`,
   fragmentShader: `
-    varying vec3 vColor;
+    varying vec3  vColor;
+    varying float vAlpha;
     void main() {
       vec2  c     = gl_PointCoord - 0.5;
       float d     = length(c);
       float alpha = smoothstep(0.5, 0.06, d);
       alpha *= alpha;                       // extra-soft halo edge
+      alpha *= vAlpha;                      // entrance fade-in
       float core  = smoothstep(0.15, 0.0, d) * 0.30;   // faint bright heart
       gl_FragColor = vec4(vColor + core, alpha);
       #include <colorspace_fragment>
@@ -1702,21 +1741,52 @@ function animate() {
     })
   }
 
+  // ── Particle entrance trigger: first time the works scene peeks in ──
+  if (!entranceStarted && workA > 0.03) entranceStarted = true
+  if (entranceStarted && entranceT < 1) entranceT = Math.min(1, entranceT + 0.0075)
+
+  // ── Scroll-velocity turbulence: raw↔lerp lag is proportional to speed ──
+  // Signed & smoothed so direction changes (incl. the idle snap's pull-back)
+  // glide through zero instead of teleporting the trail. Sluggish on purpose:
+  // ~1.5 s to build, ~4 s to settle.
+  const velNow = (rawScroll - lerpScroll) * 0.008
+  scrollVelS += (velNow - scrollVelS) * (Math.abs(velNow) > Math.abs(scrollVelS) ? 0.03 : 0.012)
+  scrollTurb = Math.min(1, Math.abs(scrollVelS))
+  pMat.uniforms.uTurb.value = scrollTurb
+
   // Update particles every 2nd frame — 30 fps is indistinguishable for slow noise motion
   if (frame % 2 === 0) {
     const pt = frame * 0.006
+    const tb = scrollTurb
     for (let i = 0; i < P_COUNT; i++) {
-      const sa = pBase[i * 3]
-      const t  = pBase[i * 3 + 1]
-      const br = pBase[i * 3 + 2]
-      const twistAngle = sa + pt * 0.18 + 0.35 * Math.sin(pt * 0.4 + pNoiseOff[i * 3 + 2])
-      const r  = br + 0.22 * Math.sin(pt * 0.9 + pNoiseOff[i * 3] + t * 3.0)
-      const y  = (t - 0.5) * HSPAN + 0.18 * Math.sin(pt * 0.7 + pNoiseOff[i * 3 + 1] + t * 2.0)
-      pPosArr[i * 3]     = r * Math.cos(twistAngle)
-      pPosArr[i * 3 + 1] = y
-      pPosArr[i * 3 + 2] = r * Math.sin(twistAngle)
+      const v3 = i * 3
+      const sa = pBase[v3]
+      const t  = pBase[v3 + 1]
+      const br = pBase[v3 + 2]
+      const n0 = pNoiseOff[v3]
+      const n1 = pNoiseOff[v3 + 1]
+      const n2 = pNoiseOff[v3 + 2]
+      // base spiral orbit + scroll turbulence (slow swell + drag trail)
+      const twistAngle = sa + pt * 0.18 + 0.35 * Math.sin(pt * 0.4 + n2)
+                       + tb * 0.50 * Math.sin(pt * 1.1 + n1 * 2.0)
+      const r  = br + 0.22 * Math.sin(pt * 0.9 + n0 + t * 3.0)
+               + tb * 0.55 * Math.sin(pt * 1.4 + n0 * 3.0)
+      const y  = (t - 0.5) * HSPAN + 0.18 * Math.sin(pt * 0.7 + n1 + t * 2.0)
+               - scrollVelS * (n2 * 0.159) * 1.4           // signed trail — eases through zero
+      const tx = r * Math.cos(twistAngle)
+      const ty = y
+      const tz = r * Math.sin(twistAngle)
+      // entrance convergence: staggered easeOutCubic from scattered shell
+      let e = (entranceT - n1 * 0.0875) / 0.45          // stagger 0..0.55
+      e = e < 0 ? 0 : e > 1 ? 1 : e
+      const ease = 1 - (1 - e) * (1 - e) * (1 - e)
+      pPosArr[v3]     = pStartArr[v3]     + (tx - pStartArr[v3])     * ease
+      pPosArr[v3 + 1] = pStartArr[v3 + 1] + (ty - pStartArr[v3 + 1]) * ease
+      pPosArr[v3 + 2] = pStartArr[v3 + 2] + (tz - pStartArr[v3 + 2]) * ease
+      pAlphaArr[i]    = ease * ease
     }
-    pPosAttr.needsUpdate = true
+    pPosAttr.needsUpdate   = true
+    pAlphaAttr.needsUpdate = true
   }
 
   // Logo: rotation + particle update
