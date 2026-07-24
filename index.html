@@ -1548,13 +1548,18 @@ function animate() {
   // Helix visibility: fade in as entering works sections (S2=2*PAGE_H)
   let workA
   const FADE = PAGE_H
+  // Hero cover (kali canvas top edge) only closes the screen once the wrap is
+  // within 0.14*PAGE_H. The works scene must be fully faded BEFORE that, or a
+  // small upward swipe at the start (touch ×1.8) instantly reveals cards
+  // through the uncovered top strip — the "白色底消失" bug on phones.
+  const WRAP_COVER = 0.14 * PAGE_H
   const FADE_OUT = 0.6 * PAGE_H   // tail-only fade — S3 cards keep full opacity
   if (dp < FADE) {
     workA = dp / FADE
-  } else if (dp < TOTAL - FADE_OUT) {
+  } else if (dp < TOTAL - WRAP_COVER - FADE_OUT) {
     workA = 1
   } else {
-    workA = (TOTAL - dp) / FADE_OUT
+    workA = (TOTAL - WRAP_COVER - dp) / FADE_OUT
   }
   workA = Math.max(0, Math.min(1, workA))
 
@@ -1751,9 +1756,13 @@ function animate() {
   kaliMat.uniforms.uHueShift.value    = KALI.hueShift
   kaliCanvas.style.transform = `translateY(${s1Yt}px)`  // slides with S1
 
-  // Only render each pass when its content is actually on screen
-  const onS1    = dp < PAGE_H * 1.5 || dp > TOTAL - PAGE_H * 0.5
-  const onWorks = dp > PAGE_H * 0.5 && dp < TOTAL - PAGE_H * 0.5
+  // Only render each pass when its content is actually on screen.
+  // Kali canvas is 116% tall with a -0.14*PAGE_H offset, so it starts rising
+  // into view from TOTAL-1.14*PAGE_H — render from 1.2 to avoid a stale frame.
+  // Helix must keep rendering while its tail fade (ending at TOTAL-WRAP_COVER)
+  // is still visible.
+  const onS1    = dp < PAGE_H * 1.5 || dp > TOTAL - PAGE_H * 1.2
+  const onWorks = dp > PAGE_H * 0.5 && dp < TOTAL - WRAP_COVER
 
   // Kali: only on S1; skip when nothing has changed (scroll static + no animation)
   // Fallback re-render every 90 frames catches any panel param tweaks
